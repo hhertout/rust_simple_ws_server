@@ -14,7 +14,7 @@ struct ChatMessage {
 type Users = Arc<Mutex<Vec<mpsc::UnboundedSender<Result<Message, warp::Error>>>>>;
 
 pub(crate) async fn handle_connection(ws: WebSocket) {
-    let (mut user_ws_tx, mut user_ws_rx) = ws.split();
+    let (mut user_sender, mut user_receiver) = ws.split();
     let (tx, rx) = mpsc::unbounded_channel();
 
     let rx = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
@@ -28,12 +28,12 @@ pub(crate) async fn handle_connection(ws: WebSocket) {
         let mut rx = rx;
         while let Some(result) = rx.next().await {
             if let Ok(msg) = result {
-                user_ws_tx.send(msg).await.unwrap();
+                user_sender.send(msg).await.unwrap();
             }
         }
     });
 
-    while let Some(result) = user_ws_rx.next().await {
+    while let Some(result) = user_receiver.next().await {
         if let Ok(msg) = result {
             handle_message(msg, &user_clone).await
         }
