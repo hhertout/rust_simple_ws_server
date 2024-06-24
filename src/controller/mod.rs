@@ -33,7 +33,7 @@ pub(crate) async fn handle_connection(
     let rx = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
 
     {
-        let mut users_guard = users.lock().unwrap();
+        let mut users_guard = users.lock().await;
         users_guard.push(tx);
     }
 
@@ -75,7 +75,7 @@ async fn handle_message(ctx: Context, msg: Message, users: &Users) {
             let message = serde_json::to_string(&response_message).unwrap();
             let to_send = Message::text(message);
 
-            for tx in users.lock().unwrap().iter() {
+            for tx in users.lock().await.iter() {
                 tx.send(Ok(to_send.clone())).unwrap();
             }
         }

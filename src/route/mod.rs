@@ -1,16 +1,16 @@
 use crate::{controller, database::redis};
 use ::redis::Connection;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
 use warp::{filters::ws::Message, Filter};
 
-pub type Users = Arc<Mutex<Vec<mpsc::UnboundedSender<Result<Message, warp::Error>>>>>;
+pub type Users = Arc<AsyncMutex<Vec<mpsc::UnboundedSender<Result<Message, warp::Error>>>>>;
 
 pub fn router() -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let redis_client = redis::connect();
     let redis = Arc::new(AsyncMutex::new(redis_client));
 
-    let users: Users = Arc::new(Mutex::new(Vec::new()));
+    let users: Users = Arc::new(AsyncMutex::new(Vec::new()));
 
     let chat_route = warp::path("chat")
         .and(warp::ws())
