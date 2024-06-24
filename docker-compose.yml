@@ -1,12 +1,22 @@
 services:
-  app:
-    build:
-        context: .
-        dockerfile: dev.dockerfile
-    command: "cargo watch -x run"
-    volumes:
-        - ./src:/app/src
+  #app:
+  #  build:
+  #    context: .
+  #    dockerfile: dev.dockerfile
+  #  command: "cargo watch -x run"
+  #  volumes:
+  #    - ./src:/app/src
+  #  ports:
+  #    - "3030:3030"
+  #  env_file:
+  #    - .env
+
+  redis:
+    image: redis:latest
     ports:
-        - "3030:3030"
-    env_file:
-        - .env
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
