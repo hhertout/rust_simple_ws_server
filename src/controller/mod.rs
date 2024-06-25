@@ -25,6 +25,7 @@ pub(crate) async fn handle_connection(
     users: Users,
 ) {
     println!("A new user join !");
+
     let ctx = Context { redis };
 
     let (mut user_sender, mut user_receiver) = ws.split();
@@ -58,7 +59,10 @@ pub(crate) async fn handle_connection(
 async fn handle_message(ctx: Context, msg: Message, users: &Users) {
     if let Ok(text) = msg.to_str() {
         if let Ok(chat_msg) = serde_json::from_str::<ChatMessage>(text) {
-            println!("[New message] : {} send : '{}'", chat_msg.user, chat_msg.message);
+            println!(
+                "[New message] : {} send : '{}'",
+                chat_msg.user, chat_msg.message
+            );
 
             let mut conn = ctx.redis.lock().await;
 

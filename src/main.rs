@@ -4,12 +4,13 @@ pub(crate) mod controller;
 pub(crate) mod route;
 pub(crate) mod database;
 pub(crate) mod repository;
+pub(crate) mod middleware;
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
-    let route = route::router();
+    let route = route::chat_websocket();
     let port = std::env::var("PORT")
         .expect("Variable port is not defined")
         .parse::<u16>()
