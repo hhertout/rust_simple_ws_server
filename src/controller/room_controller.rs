@@ -22,7 +22,7 @@ pub(crate) async fn create_room(redis: Arc<Mutex<Connection>>) -> Result<Json, R
     };
 
     return Ok(json(
-        &json!({"room": id.to_string().to_owned() ,"status": token.to_owned()}),
+        &json!({"room": id.to_string().to_owned() ,"token": token.to_owned()}),
     ));
 }
 
