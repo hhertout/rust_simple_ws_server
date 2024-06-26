@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use chat_ws::chat_websocket;
 use health::health_route;
 use redis::Connection;
-use room::{create_room, delete_room};
-use tokio::sync::{mpsc, Mutex};
-use warp::{filters::ws::Message, Filter};
+use room::{create_room_handler, delete_room_handler};
+use tokio::sync::Mutex;
+use warp::Filter;
 
 use crate::database::redis::connect;
 
@@ -12,16 +13,20 @@ pub(crate) mod chat_ws;
 pub(crate) mod health;
 pub(crate) mod room;
 
+pub fn v1(
+    redis: Arc<Mutex<Connection>>,
+) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path("api")
+        .and(create_room_handler(Arc::clone(&redis)).or(delete_room_handler(Arc::clone(&redis))))
+}
+
 pub fn routes() -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let redis_client = connect();
     let redis = Arc::new(Mutex::new(redis_client));
 
-    let route = crate::chat_ws::chat_websocket(Arc::clone(&redis))
-        .or(health_route())
-        .or(create_room(Arc::clone(&redis)))
-        .or(delete_room(Arc::clone(&redis)));
-
-    return route;
+    health_route()
+        .or(chat_websocket(Arc::clone(&redis)))
+        .or(v1(Arc::clone(&redis)))
 }
 
 fn with_redis(

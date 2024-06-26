@@ -5,7 +5,6 @@ use tokio::sync::mpsc;
 use tokio::sync::Mutex as AsyncMutex;
 use warp::filters::ws::{Message, WebSocket};
 
-use crate::repository;
 use crate::route::chat_ws::Users;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,7 +23,7 @@ pub(crate) async fn handle_connection(
     redis: Arc<AsyncMutex<redis::Connection>>,
     users: Users,
 ) {
-    println!("A new user join !");
+    println!("A new user join the room !");
 
     let ctx = Context { redis };
 
@@ -56,7 +55,7 @@ pub(crate) async fn handle_connection(
     }
 }
 
-async fn handle_message(ctx: Context, msg: Message, users: &Users) {
+async fn handle_message(_ctx: Context, msg: Message, users: &Users) {
     if let Ok(text) = msg.to_str() {
         if let Ok(chat_msg) = serde_json::from_str::<ChatMessage>(text) {
             println!(
@@ -64,13 +63,6 @@ async fn handle_message(ctx: Context, msg: Message, users: &Users) {
                 chat_msg.user, chat_msg.message
             );
 
-            let mut conn = ctx.redis.lock().await;
-
-            repository::message::insert_message(
-                &mut conn,
-                chat_msg.user.clone().as_str(),
-                chat_msg.message.clone().as_str(),
-            );
             let response_message = ChatMessage {
                 user: chat_msg.user,
                 message: chat_msg.message,

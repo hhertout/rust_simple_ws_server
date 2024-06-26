@@ -1,5 +1,4 @@
 use dotenv::dotenv;
-use route::{chat_ws, health};
 
 pub(crate) mod controller;
 pub(crate) mod database;

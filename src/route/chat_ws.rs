@@ -14,7 +14,7 @@ pub fn chat_websocket(
 ) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let users: Users = Arc::new(Mutex::new(Vec::new()));
 
-    let chat_route = warp::path("chat")
+    warp::path("chat")
         .and(warp::ws())
         .and(warp::header::optional("Authorization"))
         .and(with_redis(redis))
@@ -22,9 +22,7 @@ pub fn chat_websocket(
         .and_then(middleware::authorization::authenticate)
         .map(|(ws, redis, users): Handler| {
             ws.on_upgrade(move |socket| handle_connection(socket, redis, users))
-        });
-
-    return chat_route;
+        })
 }
 
 fn with_users(
