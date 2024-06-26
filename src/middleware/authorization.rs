@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use crate::route::Users;
+use crate::route::chat_ws::Users;
 
 #[derive(Debug)]
 struct InvalidToken;

@@ -1,41 +1,31 @@
-use crate::{controller, database::redis, middleware};
-use ::redis::Connection;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex as AsyncMutex};
+
+use health::health_route;
+use redis::Connection;
+use room::{create_room, delete_room};
+use tokio::sync::{mpsc, Mutex};
 use warp::{filters::ws::Message, Filter};
 
-pub type Users = Arc<AsyncMutex<Vec<mpsc::UnboundedSender<Result<Message, warp::Error>>>>>;
-type Handler = (warp::ws::Ws, Arc<AsyncMutex<Connection>>, Users);
+use crate::database::redis::connect;
 
-pub fn chat_websocket(
-) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let redis_client = redis::connect();
-    let redis = Arc::new(AsyncMutex::new(redis_client));
+pub(crate) mod chat_ws;
+pub(crate) mod health;
+pub(crate) mod room;
 
-    let users: Users = Arc::new(AsyncMutex::new(Vec::new()));
+pub fn routes() -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let redis_client = connect();
+    let redis = Arc::new(Mutex::new(redis_client));
 
-    let chat_route = warp::path("chat")
-        .and(warp::ws())
-        .and(warp::header::optional("Authorization"))
-        .and(with_redis(redis))
-        .and(with_users(users))
-        .and_then(middleware::authorization::authenticate)
-        .map(|(ws, redis, users): Handler| {
-            ws.on_upgrade(move |socket| controller::handle_connection(socket, redis, users))
-        });
+    let route = crate::chat_ws::chat_websocket(Arc::clone(&redis))
+        .or(health_route())
+        .or(create_room(Arc::clone(&redis)))
+        .or(delete_room(Arc::clone(&redis)));
 
-    return chat_route;
+    return route;
 }
 
 fn with_redis(
-    redis: Arc<AsyncMutex<Connection>>,
-) -> impl Filter<Extract = (Arc<AsyncMutex<Connection>>,), Error = std::convert::Infallible> + Clone
-{
+    redis: Arc<Mutex<Connection>>,
+) -> impl Filter<Extract = (Arc<Mutex<Connection>>,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || Arc::clone(&redis))
-}
-
-fn with_users(
-    users: Users,
-) -> impl Filter<Extract = (Users,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || users.clone())
 }
