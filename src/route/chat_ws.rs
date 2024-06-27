@@ -7,7 +7,7 @@ use warp::{filters::ws::Message, Filter};
 use super::with_redis;
 
 pub type Users = Arc<Mutex<Vec<mpsc::UnboundedSender<Result<Message, warp::Error>>>>>;
-type Handler = (warp::ws::Ws, Arc<Mutex<Connection>>, Users);
+type Handler = (warp::ws::Ws, Users);
 
 pub fn chat_websocket(
     redis: Arc<Mutex<Connection>>,
@@ -19,10 +19,9 @@ pub fn chat_websocket(
         .and(warp::header::optional("Authorization"))
         .and(with_redis(redis))
         .and(with_users(users))
-        .and_then(middleware::authorization::authenticate)
-        .map(|(ws, redis, users): Handler| {
-            ws.on_upgrade(move |socket| handle_connection(socket, redis, users))
-        })
+        .and(warp::path::param::<String>())
+        .and_then(middleware::authorization::is_authenticate)
+        .map(|(ws, users): Handler| ws.on_upgrade(move |socket| handle_connection(socket, users)))
 }
 
 fn with_users(

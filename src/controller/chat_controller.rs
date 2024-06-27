@@ -2,7 +2,6 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::sync::Mutex as AsyncMutex;
 use warp::filters::ws::{Message, WebSocket};
 
 use crate::route::chat_ws::Users;
@@ -13,19 +12,11 @@ struct ChatMessage {
     message: String,
 }
 
-#[derive(Clone)]
-struct Context {
-    redis: Arc<AsyncMutex<redis::Connection>>,
-}
-
 pub(crate) async fn handle_connection(
     ws: WebSocket,
-    redis: Arc<AsyncMutex<redis::Connection>>,
     users: Users,
 ) {
     println!("A new user join the room !");
-
-    let ctx = Context { redis };
 
     let (mut user_sender, mut user_receiver) = ws.split();
     let (tx, rx) = mpsc::unbounded_channel();
@@ -50,12 +41,12 @@ pub(crate) async fn handle_connection(
 
     while let Some(result) = user_receiver.next().await {
         if let Ok(msg) = result {
-            handle_message(ctx.clone(), msg, &user_clone).await
+            handle_message(msg, &user_clone).await
         }
     }
 }
 
-async fn handle_message(_ctx: Context, msg: Message, users: &Users) {
+async fn handle_message(msg: Message, users: &Users) {
     if let Ok(text) = msg.to_str() {
         if let Ok(chat_msg) = serde_json::from_str::<ChatMessage>(text) {
             println!(
