@@ -6,7 +6,8 @@ use warp::{filters::ws::Message, Filter};
 
 use super::with_redis;
 
-pub type Users = Arc<Mutex<Vec<mpsc::UnboundedSender<Result<Message, warp::Error>>>>>;
+pub type UserTx = mpsc::UnboundedSender<Result<Message, warp::Error>>;
+pub type Users = Arc<Mutex<Vec<(usize, UserTx)>>>;
 type Handler = (warp::ws::Ws, Users);
 
 pub fn chat_websocket(
