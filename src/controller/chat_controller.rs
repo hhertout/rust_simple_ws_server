@@ -69,9 +69,11 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
                 users_guard.remove(index);
             }
 
-            for (_, tx) in users_guard.iter() {
-                let message = format!("User connected: {}", users_guard.len());
-                let _ = tx.send(Ok(Message::text(message)));
+            if users_guard.len() > 0 {
+                for (_, tx) in users_guard.iter() {
+                    let message = format!("User connected: {}", users_guard.len());
+                    let _ = tx.send(Ok(Message::text(message)));
+                }
             }
         }
     });
