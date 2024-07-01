@@ -90,8 +90,13 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
 }
 
 async fn handle_message(msg: Message, users: &Users) {
-    if let Ok(text) = msg.to_str() {
-        if let Ok(chat_msg) = serde_json::from_str::<ChatMessage>(text) {
+    let text = match msg.to_str() {
+        Ok(text) => text,
+        Err(_) => return println!("Error : Message cannot be parsed"),
+    };
+
+    match serde_json::from_str::<ChatMessage>(text) {
+        Ok(chat_msg) => {
             println!(
                 "[New message] : {} sent : '{}'",
                 chat_msg.user, chat_msg.message
@@ -111,8 +116,9 @@ async fn handle_message(msg: Message, users: &Users) {
                         }
                     }
                 }
-                _ => println!("Error : Message cannot be parsed"),
+                Err(_) => return println!("Error : Message cannot be parsed"),
             };
         }
+        Err(_) => return println!("Error : Message cannot be parsed"),
     }
 }
