@@ -7,9 +7,33 @@ use warp::filters::ws::{Message, WebSocket};
 use crate::route::chat_ws::Users;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ChatMessage {
+struct ChatEvent {
     user: String,
     message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DisconnectEvent {
+    user: Option<String>,
+    message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UpdateEvent {
+    user_connected: usize,
+}
+
+// TODO ErrorEvent
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "event")]
+enum SocketEvent {
+    #[serde(rename = "chat")]
+    ChatEvent(ChatEvent),
+    #[serde(rename = "update")]
+    UpdateEvent(UpdateEvent),
+    #[serde(rename = "disconnect")]
+    DisconnectEvent(DisconnectEvent),
 }
 
 pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
@@ -32,8 +56,6 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
     let user_clone = Arc::clone(&users);
     let user_clone_bis = Arc::clone(&users);
 
-    let mut interval = interval(Duration::from_secs(10));
-
     tokio::spawn(async move {
         while let Some(result) = rx.next().await {
             if let Ok(msg) = result {
@@ -44,7 +66,6 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
             }
         }
 
-        // Suppression de l'expéditeur de la liste des utilisateurs lors de la déconnexion
         let mut users_guard = user_clone.lock().await;
         if let Some(pos) = users_guard.iter().position(|(id, _)| *id == user_id) {
             users_guard.remove(pos);
@@ -52,6 +73,7 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
         }
     });
 
+    let mut interval = interval(Duration::from_secs(5));
     tokio::spawn(async move {
         loop {
             interval.tick().await;
@@ -71,8 +93,15 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
 
             if users_guard.len() > 0 {
                 for (_, tx) in users_guard.iter() {
-                    let message = format!("User connected: {}", users_guard.len());
-                    let _ = tx.send(Ok(Message::text(message)));
+                    let user_con = UpdateEvent {
+                        user_connected: users_guard.len(),
+                    };
+                    let event = SocketEvent::UpdateEvent(user_con);
+
+                    match serde_json::to_string(&event) {
+                        Ok(message) => return tx.send(Ok(Message::text(message))),
+                        _ => println!("Error : Update Message cannot be parsed"),
+                    }
                 }
             }
         }
@@ -80,7 +109,7 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
 
     while let Some(result) = user_receiver.next().await {
         match result {
-            Ok(msg) => handle_message(msg, &users).await,
+            Ok(msg) => handle_message(msg, &users, user_id).await,
             Err(_) => {
                 println!("Connection closed");
                 break;
@@ -89,22 +118,39 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
     }
 }
 
-async fn handle_message(msg: Message, users: &Users) {
+async fn handle_message(msg: Message, users: &Users, user_id: usize) {
     let text = match msg.to_str() {
         Ok(text) => text,
-        Err(_) => return println!("Error : Message cannot be parsed"),
+        Err(err) => return println!("Error : Message cannot be parsed : {:?}", err),
     };
 
-    match serde_json::from_str::<ChatMessage>(text) {
-        Ok(chat_msg) => {
-            println!(
-                "[New message] : {} sent : '{}'",
-                chat_msg.user, chat_msg.message
-            );
+    match serde_json::from_str::<SocketEvent>(text) {
+        Ok(socket_event) => {
+            let response_message = match socket_event {
+                SocketEvent::ChatEvent(event) => {
+                    let event_to_send = ChatEvent {
+                        user: event.user.clone(),
+                        message: event.message.clone(),
+                    };
+                    SocketEvent::ChatEvent(event_to_send)
+                }
+                SocketEvent::DisconnectEvent(event) => {
+                    let user = match event.user {
+                        Some(user) => user,
+                        None => return,
+                    };
 
-            let response_message = ChatMessage {
-                user: chat_msg.user.clone(),
-                message: chat_msg.message.clone(),
+                    let mut user_gard = users.lock().await;
+                    user_gard.remove(user_id);
+
+                    let event_to_send = DisconnectEvent {
+                        user: None,
+                        message: Some(format!("User {} left the room", user)),
+                    };
+
+                    SocketEvent::DisconnectEvent(event_to_send)
+                }
+                _ => return,
             };
 
             match serde_json::to_string(&response_message) {
@@ -116,9 +162,9 @@ async fn handle_message(msg: Message, users: &Users) {
                         }
                     }
                 }
-                Err(_) => return println!("Error : Message cannot be parsed"),
+                Err(err) => return println!("Error : Message cannot be parsed : {:?}", err),
             };
         }
-        Err(_) => return println!("Error : Message cannot be parsed"),
+        Err(err) => return println!("Error : Message cannot be parsed: {:?}", err),
     }
 }
