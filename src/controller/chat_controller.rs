@@ -14,7 +14,9 @@ struct ChatEvent {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DisconnectEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
 }
 
@@ -22,8 +24,10 @@ struct DisconnectEvent {
 struct UpdateEvent {
     user_connected: usize,
 }
-
-// TODO ErrorEvent
+#[derive(Debug, Serialize, Deserialize)]
+struct ErrorEvent {
+    message: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "event")]
@@ -34,11 +38,11 @@ enum SocketEvent {
     UpdateEvent(UpdateEvent),
     #[serde(rename = "disconnect")]
     DisconnectEvent(DisconnectEvent),
+    #[serde(rename = "error")]
+    ErrorEvent(ErrorEvent),
 }
 
 pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
-    println!("A new user join the room !");
-
     let (mut user_sender, mut user_receiver) = ws.split();
     let (tx, rx) = mpsc::unbounded_channel();
 
@@ -50,7 +54,6 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
         let mut users_guard = users.lock().await;
         user_id = users_guard.len();
         users_guard.push((user_id, tx));
-        println!("Entering the room !");
     }
 
     let user_clone = Arc::clone(&users);
@@ -73,7 +76,7 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
         }
     });
 
-    let mut interval = interval(Duration::from_secs(5));
+    let mut interval = interval(Duration::from_secs(30));
     tokio::spawn(async move {
         loop {
             interval.tick().await;
@@ -88,20 +91,45 @@ pub(crate) async fn handle_connection(ws: WebSocket, users: Users) {
             }
 
             for index in disconnected_users.into_iter().rev() {
+                println!("A user will be disconnected");
                 users_guard.remove(index);
+
+                if users_guard.len() > 0 {
+                    let event = DisconnectEvent {
+                        user: None,
+                        message: Some(String::from("A user was disconnecting from the room")),
+                    };
+                    
+                    for (_, tx) in users_guard.iter() {
+                        let to_send = serde_json::to_string(&event);
+                        match to_send {
+                            Ok(message) => {
+                                let _ = tx.send(Ok(Message::text(message)));
+                            }
+                            Err(err) => {
+                                println!("Failed to parse disconnect message {}", err);
+                            }
+                        }
+                    }
+                };
+                return;
             }
 
             if users_guard.len() > 0 {
-                for (_, tx) in users_guard.iter() {
-                    let user_con = UpdateEvent {
-                        user_connected: users_guard.len(),
-                    };
-                    let event = SocketEvent::UpdateEvent(user_con);
+                let user_con = UpdateEvent {
+                    user_connected: users_guard.len(),
+                };
+                let event = SocketEvent::UpdateEvent(user_con);
 
+                for (_, tx) in users_guard.iter() {
                     match serde_json::to_string(&event) {
-                        Ok(message) => return tx.send(Ok(Message::text(message))),
-                        _ => println!("Error : Update Message cannot be parsed"),
-                    }
+                        Ok(message) => {
+                            let _ = tx.send(Ok(Message::text(message)));
+                        }
+                        Err(err) => {
+                            println!("Failed to parse the update message {}", err);
+                        }
+                    };
                 }
             }
         }
@@ -162,9 +190,31 @@ async fn handle_message(msg: Message, users: &Users, user_id: usize) {
                         }
                     }
                 }
-                Err(err) => return println!("Error : Message cannot be parsed : {:?}", err),
+                Err(err) => {
+                    let err_message = SocketEvent::ErrorEvent(ErrorEvent {
+                        message: String::from(format!("Failed to send message to user: {}", err)),
+                    });
+                    let to_send = serde_json::to_string(&err_message).unwrap();
+                    for (_, tx) in users.lock().await.iter() {
+                        if let Err(e) = tx.send(Ok(Message::text(to_send.clone()))) {
+                            println!("Failed to send message to user: {}", e);
+                        }
+                    }
+                    return println!("Error : Message cannot be parsed : {}", err);
+                }
             };
         }
-        Err(err) => return println!("Error : Message cannot be parsed: {:?}", err),
+        Err(err) => {
+            let err_message = SocketEvent::ErrorEvent(ErrorEvent {
+                message: String::from(format!("Failed to send message to user: {}", err)),
+            });
+            let to_send = serde_json::to_string(&err_message).unwrap();
+            for (_, tx) in users.lock().await.iter() {
+                if let Err(e) = tx.send(Ok(Message::text(to_send.clone()))) {
+                    println!("Failed to send message to user: {}", e);
+                }
+            }
+            return println!("Error : Message cannot be parsed : {}", err);
+        }
     }
 }
