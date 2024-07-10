@@ -14,3 +14,4 @@ futures = "0.3.30"
 tokio-stream = "0.1.15"
 redis = "0.25.4"
 uuid = { version = "1.9.1", features = ["v4"] }
+chrono = "0.4.38"

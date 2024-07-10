@@ -1,4 +1,5 @@
 use dotenv::dotenv;
+use warp::Filter;
 
 pub(crate) mod controller;
 pub(crate) mod database;
@@ -19,7 +20,18 @@ async fn main() {
         .parse::<u16>()
         .expect("❌ Failed to parse port Variable");
 
-    let route = crate::route::routes();
+    let incoming_log = warp::log::custom(|info| {
+        eprintln!(
+            "[{}] {} {} {} {:?}",
+            chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            info.method(),
+            info.path(),
+            info.status(),
+            info.elapsed(),
+        );
+    });
+
+    let route = crate::route::routes().with(incoming_log);
 
     println!("🚀 Server is running on port {}", port);
     warp::serve(route).run(([127, 0, 0, 1], port)).await
