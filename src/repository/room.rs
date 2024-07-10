@@ -13,3 +13,7 @@ pub fn get_room_by_id(con: &mut Connection, uuid: String) -> Result<String, Redi
 pub fn delete_room(con: &mut Connection, uuid: String) -> Result<(), RedisError>{
     con.del(&uuid)
 }
+
+pub fn get_room_count(con: &mut Connection) -> Result<usize, RedisError> {
+    redis::cmd("DBSIZE").query(con)
+}

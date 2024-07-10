@@ -53,3 +53,13 @@ pub(crate) async fn delete_room(
         })),
     }
 }
+
+pub(crate) async fn get_room_count(redis: Arc<Mutex<Connection>>) -> Result<Json, Rejection> {
+    let mut con = redis.lock().await;
+    match repository::room::get_room_count(&mut con) {
+        Ok(count) => Ok(json(&json!({"count": count}))),
+        Err(err) => Err(reject::custom(CustomError {
+            message: err.to_string(),
+        })),
+    }
+}
